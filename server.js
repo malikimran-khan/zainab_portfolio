@@ -86,7 +86,7 @@ app.use((err, req, res, next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`Server running  on a port ${PORT}`);
+  console.log(`Server running  on aa port ${PORT}`);
 });
 
 // Handle unhandled promise rejections
