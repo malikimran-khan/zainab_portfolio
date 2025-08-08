@@ -8,56 +8,91 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Warn if important env variables are missing
-if (!process.env.MONGO_URI) {
-  console.error("❌ MONGO_URI is missing in your .env file");
-  process.exit(1); // Stop the server
+// Validate required environment variables
+const requiredEnvVars = ['MONGO_URI'];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`❌ ${envVar} is missing in your .env file`);
+    process.exit(1);
+  }
 }
 
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://your-frontend-domain.vercel.app'
+];
+
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  credentials: true
 }));
 
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('✅ MongoDB connected to portfolio-contact database'))
-.catch(err => {
-  console.error('❌ MongoDB connection error:', err);
-  process.exit(1);
-});
+// MongoDB connection
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected successfully'))
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
+// Contact schema and model
 const contactSchema = new mongoose.Schema({
-  name: { type: String },
-  email: { type: String },
-  subject: { type: String },
-  message: { type: String }
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  subject: { type: String, required: true },
+  message: { type: String, required: true }
 }, { timestamps: true });
 
 const Contact = mongoose.model('Contact', contactSchema);
 
+// Routes
 app.post('/api/contact', async (req, res) => {
-  console.log(req.body);
   try {
-    const contact = new Contact(req.body);
+    const { name, email, subject, message } = req.body;
+    
+    if (!name || !email || !subject || !message) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const contact = new Contact({ name, email, subject, message });
     await contact.save();
-    console.log("✅ Message saved successfully");
-    res.status(201).json({ message: '✅ Message saved successfully' });
+    
+    res.status(201).json({ message: 'Message saved successfully' });
   } catch (error) {
-    console.error('❌ Error saving message:', error);
+    console.error('Error saving message:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
 app.get('/', (req, res) => {
-  res.send(`📡 Portfolio backend is running on port ${PORT}...`);
+  res.send(`Portfolio backend is running on port ${PORT}`);
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
 });
+
+const server = app.listen(PORT, () => {
+  console.log(`Server running  on a port ${PORT}`);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+  server.close(() => process.exit(1));
+});
+
+export default app;
